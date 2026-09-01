@@ -231,3 +231,30 @@
 
 // Other Localization
 "APP_RESTART_DESC" = "App restart is required.";
+
+// Learning Filter
+"LEARNING_FILTER_OPTIONS" = "Learning Filter";
+"LEARNING_FILTER_ENABLED" = "Enable Learning Filter";
+"LEARNING_FILTER_ENABLED_DESC" = "Only channels this account is subscribed to may supply videos. App restart is required.";
+"LEARNING_FILTER_WHITELIST" = "Subscribed channels (whitelist)";
+"LEARNING_FILTER_WHITELIST_DESC" = "%@ channel IDs, %@ names. The whitelist is read from your YouTube subscriptions; open the Subscriptions tab once if it looks incomplete.";
+"LEARNING_FILTER_WHITELIST_EMPTY" = "Nothing synced yet - sign in and open the Subscriptions tab";
+"LEARNING_FILTER_HOME" = "Filter Home and recommendations";
+"LEARNING_FILTER_HOME_DESC" = "Hide home feed videos from channels you are not subscribed to.";
+"LEARNING_FILTER_SEARCH" = "Filter search results";
+"LEARNING_FILTER_SEARCH_DESC" = "Search still works; results from channels you are not subscribed to are hidden.";
+"LEARNING_FILTER_SHORTS" = "Filter Shorts";
+"LEARNING_FILTER_SHORTS_DESC" = "Hide Shorts from channels you are not subscribed to, and skip them in the Shorts player.";
+"LEARNING_FILTER_RELATED" = "Filter related videos";
+"LEARNING_FILTER_RELATED_DESC" = "Hide related and up-next videos from channels you are not subscribed to.";
+"LEARNING_FILTER_STRICT" = "Strict mode";
+"LEARNING_FILTER_STRICT_DESC" = "Hide a video when its channel cannot be identified, instead of showing it. Recommended.";
+"LEARNING_FILTER_BLOCK_SUBSCRIBE" = "Block subscribing and unsubscribing";
+"LEARNING_FILTER_BLOCK_SUBSCRIBE_DESC" = "Removes subscribe buttons and blocks subscription changes. Existing subscriptions are left untouched. App restart is required.";
+"LEARNING_FILTER_SINGLE_ACCOUNT" = "Allow only one account";
+"LEARNING_FILTER_SINGLE_ACCOUNT_DESC" = "Hides Add account once an account is signed in. Signing out stays possible. App restart is required.";
+"LEARNING_FILTER_RESET_WHITELIST" = "Clear the whitelist";
+"LEARNING_FILTER_RESET_WHITELIST_DESC" = "Forget every harvested channel and re-read subscriptions from scratch.";
+"LEARNING_FILTER_RESET_ACCOUNT" = "Reset the account lock";
+"LEARNING_FILTER_RESET_ACCOUNT_DESC" = "Use after signing out if Add account is still blocked.";
+"LEARNING_FILTER_CONFIRM" = "Are you sure?";

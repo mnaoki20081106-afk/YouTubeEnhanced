@@ -5,6 +5,10 @@
 #import "../Tweaks/YouTubeHeader/YTUIUtils.h"
 #import "../Tweaks/YouTubeHeader/YTSettingsPickerViewController.h"
 #import "../YouTubeEnhanced.h"
+#import "../Tweaks/YouTubeHeader/YTAlertView.h"
+#import "LearningFilter/LFCommon.h"
+#import "LearningFilter/LFPolicy.h"
+#import "LearningFilter/LFSubscriptionStore.h"
 
 static BOOL IsEnabled(NSString *key) {
     return [[NSUserDefaults standardUserDefaults] boolForKey:key];
@@ -1849,6 +1853,157 @@ extern NSBundle *YouTubePlusBundle();
         [settingsViewController pushViewController:picker];
         return YES;
     }];
+
+# pragma mark - LearningFilter
+    YTSettingsSectionItem *learningFilterGroup = [YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_OPTIONS") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+        LFSubscriptionStore *store = [LFSubscriptionStore sharedInstance];
+
+        YTSettingsSectionItem *whitelistStatus = [YTSettingsSectionItemClass
+            itemWithTitle:LOC(@"LEARNING_FILTER_WHITELIST")
+            titleDescription:[NSString stringWithFormat:LOC(@"LEARNING_FILTER_WHITELIST_DESC"),
+                                                        @(store.subscribedChannelIds.count),
+                                                        @(store.subscribedNames.count)]
+            accessibilityIdentifier:nil
+            detailTextBlock:nil
+            selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerIndex) {
+                NSMutableArray <YTSettingsSectionItem *> *channelRows = [NSMutableArray array];
+                for (NSString *name in store.subscribedNames)
+                    [channelRows addObject:[YTSettingsSectionItemClass itemWithTitle:name
+                                                                accessibilityIdentifier:nil
+                                                                        detailTextBlock:nil
+                                                                            selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+                for (NSString *channelId in store.subscribedChannelIds)
+                    [channelRows addObject:[YTSettingsSectionItemClass itemWithTitle:channelId
+                                                                accessibilityIdentifier:nil
+                                                                        detailTextBlock:nil
+                                                                            selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+                if (channelRows.count == 0)
+                    [channelRows addObject:[YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_WHITELIST_EMPTY")
+                                                                accessibilityIdentifier:nil
+                                                                        detailTextBlock:nil
+                                                                            selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+                YTSettingsPickerViewController *channelPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"LEARNING_FILTER_WHITELIST") pickerSectionTitle:nil rows:channelRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                [settingsViewController pushViewController:channelPicker];
+                return YES;
+            }];
+
+        NSArray <YTSettingsSectionItem *> *rows = @[
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_ENABLED")
+                titleDescription:LOC(@"LEARNING_FILTER_ENABLED_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFEnabledKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFEnabledKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            whitelistStatus,
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_HOME")
+                titleDescription:LOC(@"LEARNING_FILTER_HOME_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFFilterHomeKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFFilterHomeKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_SEARCH")
+                titleDescription:LOC(@"LEARNING_FILTER_SEARCH_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFFilterSearchKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFFilterSearchKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_SHORTS")
+                titleDescription:LOC(@"LEARNING_FILTER_SHORTS_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFFilterShortsKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFFilterShortsKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_RELATED")
+                titleDescription:LOC(@"LEARNING_FILTER_RELATED_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFFilterRelatedKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFFilterRelatedKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_STRICT")
+                titleDescription:LOC(@"LEARNING_FILTER_STRICT_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFStrictKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFStrictKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_BLOCK_SUBSCRIBE")
+                titleDescription:LOC(@"LEARNING_FILTER_BLOCK_SUBSCRIBE_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFBlockSubscribeKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFBlockSubscribeKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_SINGLE_ACCOUNT")
+                titleDescription:LOC(@"LEARNING_FILTER_SINGLE_ACCOUNT_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFSingleAccountKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFSingleAccountKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_RESET_WHITELIST")
+                titleDescription:LOC(@"LEARNING_FILTER_RESET_WHITELIST_DESC")
+                accessibilityIdentifier:nil
+                detailTextBlock:nil
+                selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerIndex) {
+                    YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
+                        [[LFSubscriptionStore sharedInstance] reset];
+                    } actionTitle:LOC(@"MSG_YES")];
+                    alertView.title = LOC(@"LEARNING_FILTER_RESET_WHITELIST");
+                    alertView.subtitle = LOC(@"LEARNING_FILTER_CONFIRM");
+                    [alertView show];
+                    return YES;
+                }],
+
+            [YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_RESET_ACCOUNT")
+                titleDescription:LOC(@"LEARNING_FILTER_RESET_ACCOUNT_DESC")
+                accessibilityIdentifier:nil
+                detailTextBlock:nil
+                selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerIndex) {
+                    YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
+                        LFClearAccountBinding();
+                    } actionTitle:LOC(@"MSG_YES")];
+                    alertView.title = LOC(@"LEARNING_FILTER_RESET_ACCOUNT");
+                    alertView.subtitle = LOC(@"LEARNING_FILTER_CONFIRM");
+                    [alertView show];
+                    return YES;
+                }]
+        ];
+        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"LEARNING_FILTER_OPTIONS") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+        [settingsViewController pushViewController:picker];
+        return YES;
+    }];
+    [sectionItems addObject:learningFilterGroup];
+
     [sectionItems addObject:miscellaneousGroup];
 
     if ([settingsViewController respondsToSelector:@selector(setSectionItems:forCategory:title:icon:titleDescription:headerHidden:)])
