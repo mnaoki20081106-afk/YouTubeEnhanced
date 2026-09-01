@@ -231,3 +231,30 @@
 
 // Other Localization
 "APP_RESTART_DESC" = "アプリの再起動が必要です";
+
+// Learning Filter
+"LEARNING_FILTER_OPTIONS" = "学習用フィルタ";
+"LEARNING_FILTER_ENABLED" = "学習用フィルタを有効にする";
+"LEARNING_FILTER_ENABLED_DESC" = "登録済みチャンネルの動画だけを表示します。アプリの再起動が必要です";
+"LEARNING_FILTER_WHITELIST" = "登録チャンネル (ホワイトリスト)";
+"LEARNING_FILTER_WHITELIST_DESC" = "チャンネルID %@ 件、チャンネル名 %@ 件。ホワイトリストはYouTubeの登録チャンネルから自動取得されます。不足している場合は登録チャンネルタブを一度開いてください";
+"LEARNING_FILTER_WHITELIST_EMPTY" = "まだ同期されていません - ログインして登録チャンネルタブを開いてください";
+"LEARNING_FILTER_HOME" = "ホーム・おすすめをフィルタ";
+"LEARNING_FILTER_HOME_DESC" = "未登録チャンネルの動画をホームに表示しません";
+"LEARNING_FILTER_SEARCH" = "検索結果をフィルタ";
+"LEARNING_FILTER_SEARCH_DESC" = "検索自体は使えます。未登録チャンネルの結果だけを非表示にします";
+"LEARNING_FILTER_SHORTS" = "Shortsをフィルタ";
+"LEARNING_FILTER_SHORTS_DESC" = "未登録チャンネルのShortsを非表示にし、Shortsプレーヤーではスキップします";
+"LEARNING_FILTER_RELATED" = "関連動画をフィルタ";
+"LEARNING_FILTER_RELATED_DESC" = "未登録チャンネルの関連動画・次の動画を非表示にします";
+"LEARNING_FILTER_STRICT" = "厳格モード";
+"LEARNING_FILTER_STRICT_DESC" = "チャンネルを特定できない動画は表示せず非表示にします。推奨";
+"LEARNING_FILTER_BLOCK_SUBSCRIBE" = "チャンネル登録・解除を禁止";
+"LEARNING_FILTER_BLOCK_SUBSCRIBE_DESC" = "チャンネル登録ボタンを削除し、登録処理を無効化します。既存の登録状態は変更しません。アプリの再起動が必要です";
+"LEARNING_FILTER_SINGLE_ACCOUNT" = "アカウントは1つまで";
+"LEARNING_FILTER_SINGLE_ACCOUNT_DESC" = "ログイン済みの場合、アカウントの追加を隠します。ログアウトは可能です。アプリの再起動が必要です";
+"LEARNING_FILTER_RESET_WHITELIST" = "ホワイトリストを消去";
+"LEARNING_FILTER_RESET_WHITELIST_DESC" = "取得済みのチャンネルを全て破棄し、登録チャンネルを取得し直します";
+"LEARNING_FILTER_RESET_ACCOUNT" = "アカウント制限をリセット";
+"LEARNING_FILTER_RESET_ACCOUNT_DESC" = "ログアウト後もアカウント追加がブロックされる場合に使用します";
+"LEARNING_FILTER_CONFIRM" = "実行しますか";
