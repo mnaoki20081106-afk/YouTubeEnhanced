@@ -44,6 +44,19 @@ FOUNDATION_EXPORT LFDecision LFDecisionForNode(id _Nullable node);
 FOUNDATION_EXPORT BOOL LFShouldHideNode(id _Nullable node, LFSurface surface);
 FOUNDATION_EXPORT BOOL LFShouldHideInfo(NSDictionary<NSString *, NSString *> *_Nullable info, LFSurface surface);
 
+// True once the safety valve has tripped: enough items in a row could not be
+// identified that strict hiding was suspended for the session. Shown in
+// diagnostics, because it is the single most useful thing to know when the
+// filter is not behaving as expected.
+FOUNDATION_EXPORT BOOL LFStrictSuspended(void);
+FOUNDATION_EXPORT void LFResetStrictSuspension(void);
+
+// Changes whenever anything a cached decision depends on changes: the whitelist
+// itself, or one of the settings. A cache keyed on this can never serve a
+// verdict from before the change.
+FOUNDATION_EXPORT NSUInteger LFFilterEpoch(void);
+FOUNDATION_EXPORT void LFBumpFilterEpoch(void);
+
 // YES when the node is the kind of thing the filter is meant to act on.
 FOUNDATION_EXPORT BOOL LFNodeLooksLikeVideo(id _Nullable node);
 

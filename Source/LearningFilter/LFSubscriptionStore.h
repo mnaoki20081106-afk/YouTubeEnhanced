@@ -35,6 +35,10 @@ NS_ASSUME_NONNULL_BEGIN
 // Whitelist filtering stays inert in that state — see requirement 9.
 @property(nonatomic, readonly, getter=isEmpty) BOOL empty;
 
+// Bumped on every change. Callers that cache a decision derived from the
+// whitelist compare against this to know when their cache went stale.
+@property(nonatomic, readonly) NSUInteger generation;
+
 - (BOOL)isSubscribedToChannelId:(nullable NSString *)channelId;
 - (BOOL)isSubscribedToHandle:(nullable NSString *)handle;
 - (BOOL)isSubscribedToChannelName:(nullable NSString *)channelName;

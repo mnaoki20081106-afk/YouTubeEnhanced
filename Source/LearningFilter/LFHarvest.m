@@ -37,6 +37,11 @@ static BOOL LFLooksLikeChannelTitle(NSString *value) {
         return NO;
     if ([value hasPrefix:@"http"] || [value hasPrefix:@"//"] || [value containsString:@"://"])
         return NO;
+    // A canonical URL such as "/@matha" sits on the same line as the channel id
+    // it belongs to, so it is the first thing the search would otherwise find.
+    // It identifies the channel, but it is not its title.
+    if ([value hasPrefix:@"/"] || [value hasPrefix:@"@"] || LFNormalizeHandle(value))
+        return NO;
     if (LFNormalizeChannelId(value))
         return NO;
     // Endpoint identifiers ("FEsubscriptions", "UCBR8-60-B28hp2BmDPdntcQ") and

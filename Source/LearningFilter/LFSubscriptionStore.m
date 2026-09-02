@@ -99,6 +99,7 @@ NSString *LFNormalizeChannelName(NSString *value) {
 // Normalised names -> the display form last seen, so settings can show something readable.
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *nameMap;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *manualNameMap;
+@property(nonatomic, assign) NSUInteger generation;
 @end
 
 @implementation LFSubscriptionStore
@@ -333,6 +334,10 @@ NSString *LFNormalizeChannelName(NSString *value) {
 }
 
 - (void)persist {
+    @synchronized(self) {
+        self.generation++;
+    }
+
     NSArray<NSString *> *channelIds = nil;
     NSArray<NSString *> *handles = nil;
     NSArray<NSString *> *names = nil;

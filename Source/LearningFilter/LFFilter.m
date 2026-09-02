@@ -3,6 +3,50 @@
 #import "LFMetadata.h"
 #import "LFSubscriptionStore.h"
 
+static NSUInteger gSettingsEpoch = 0;
+
+// Strict mode hides anything whose channel cannot be read. That is right when
+// identification usually works and occasionally does not. It is catastrophic
+// when identification stops working altogether — a YouTube update changes a
+// payload shape, say — because then it hides everything and leaves an empty app
+// with no obvious way back.
+//
+// So strict hiding gives up after this many unidentifiable items in a row, and
+// resumes the moment anything is identified again. In normal operation the
+// counter never gets near the threshold: one recognised item resets it.
+static const NSUInteger LFStrictSuspensionThreshold = 25;
+static NSUInteger gConsecutiveUnknown = 0;
+static BOOL gStrictSuspended = NO;
+
+BOOL LFStrictSuspended(void) {
+    return gStrictSuspended;
+}
+
+void LFResetStrictSuspension(void) {
+    gConsecutiveUnknown = 0;
+    gStrictSuspended = NO;
+}
+
+static void LFNoteDecision(LFDecision decision) {
+    if (decision == LFDecisionUnknown) {
+        if (++gConsecutiveUnknown >= LFStrictSuspensionThreshold)
+            gStrictSuspended = YES;
+        return;
+    }
+    gConsecutiveUnknown = 0;
+    gStrictSuspended = NO;
+}
+
+NSUInteger LFFilterEpoch(void) {
+    // Both terms only ever increase, so any change to either moves the sum. That
+    // is all a cache needs: not an identity, just "is this still the same world".
+    return gSettingsEpoch + [LFSubscriptionStore sharedInstance].generation;
+}
+
+void LFBumpFilterEpoch(void) {
+    gSettingsEpoch++;
+}
+
 BOOL LFFilteringActive(void) {
     if (!LFBoolDefaultYes(LFEnabledKey))
         return NO;
@@ -107,15 +151,26 @@ BOOL LFShouldHideInfo(NSDictionary<NSString *, NSString *> *info, LFSurface surf
     if (!LFFilteringActive() || !LFSurfaceEnabled(surface))
         return NO;
 
-    switch (LFDecisionForInfo(info)) {
+    LFDecision decision = LFDecisionForInfo(info);
+    LFNoteDecision(decision);
+
+    // Dry run still computes and records the decision, but nothing is hidden.
+    if (LFDryRunEnabled())
+        return NO;
+
+    switch (decision) {
         case LFDecisionAllow:
             return NO;
         case LFDecisionHide:
             return YES;
         case LFDecisionUnknown:
-            // Requirement 14: an unreadable channel is never given the benefit of
-            // the doubt while strict mode is on.
-            return LFBoolDefaultYes(LFStrictKey);
+            // An unreadable channel is never given the benefit of the doubt while
+            // strict mode is on — unless the safety valve above has tripped.
+            if (!LFBoolDefaultYes(LFStrictKey))
+                return NO;
+            if (gStrictSuspended && LFBoolDefaultYes(LFStrictFallbackKey))
+                return NO;
+            return YES;
     }
     return NO;
 }

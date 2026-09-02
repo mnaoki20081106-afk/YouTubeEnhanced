@@ -258,3 +258,14 @@
 "LEARNING_FILTER_RESET_ACCOUNT" = "アカウント制限をリセット";
 "LEARNING_FILTER_RESET_ACCOUNT_DESC" = "ログアウト後もアカウント追加がブロックされる場合に使用します";
 "LEARNING_FILTER_CONFIRM" = "実行しますか";
+
+"LEARNING_FILTER_DRY_RUN" = "ドライラン";
+"LEARNING_FILTER_DRY_RUN_DESC" = "判定と記録だけ行い、何も非表示にしません。初回インストール時に、チャンネルが正しく識別できているかを確認してから実際の非表示を有効にするために使います";
+"LEARNING_FILTER_DIAGNOSTICS" = "診断";
+"LEARNING_FILTER_DIAGNOSTICS_DESC" = "表示 %@ 件 / 非表示 %@ 件 / 識別不可 %@ 件。各項目から何を読み取ったかを確認できます";
+"LEARNING_FILTER_DIAGNOSTICS_TOTALS" = "表示 %@ / 非表示 %@ / 識別不可 %@ / 動画以外 %@";
+"LEARNING_FILTER_DIAGNOSTICS_STATE" = "ホワイトリストのチャンネルID %@ 件、フィルタ %@、%@";
+"LEARNING_FILTER_DIAGNOSTICS_EMPTY" = "まだ記録がありません - フィードをスクロールしてから戻ってください";
+
+"LEARNING_FILTER_STRICT_FALLBACK" = "全く識別できない場合は厳格モードを中断";
+"LEARNING_FILTER_STRICT_FALLBACK_DESC" = "安全弁です。識別できない項目が連続した場合、アプリが空になるのを避けるため非表示を止めます。識別できたチャンネルのフィルタには影響せず、再び識別できた時点で厳格モードに戻ります";

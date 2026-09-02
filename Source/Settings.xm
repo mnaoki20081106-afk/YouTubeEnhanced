@@ -7,6 +7,8 @@
 #import "../YouTubeEnhanced.h"
 #import "../Tweaks/YouTubeHeader/YTAlertView.h"
 #import "LearningFilter/LFCommon.h"
+#import "LearningFilter/LFDiagnostics.h"
+#import "LearningFilter/LFFilter.h"
 #import "LearningFilter/LFPolicy.h"
 #import "LearningFilter/LFSubscriptionStore.h"
 
@@ -1950,6 +1952,16 @@ extern NSBundle *YouTubePlusBundle();
                 }
                 settingItemId:0],
 
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_STRICT_FALLBACK")
+                titleDescription:LOC(@"LEARNING_FILTER_STRICT_FALLBACK_DESC")
+                accessibilityIdentifier:nil
+                switchOn:LFBoolDefaultYes(LFStrictFallbackKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFStrictFallbackKey];
+                    return YES;
+                }
+                settingItemId:0],
+
             [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_BLOCK_SUBSCRIBE")
                 titleDescription:LOC(@"LEARNING_FILTER_BLOCK_SUBSCRIBE_DESC")
                 accessibilityIdentifier:nil
@@ -1969,6 +1981,62 @@ extern NSBundle *YouTubePlusBundle();
                     return YES;
                 }
                 settingItemId:0],
+
+            [YTSettingsSectionItemClass switchItemWithTitle:LOC(@"LEARNING_FILTER_DRY_RUN")
+                titleDescription:LOC(@"LEARNING_FILTER_DRY_RUN_DESC")
+                accessibilityIdentifier:nil
+                switchOn:IsEnabled(LFDryRunKey)
+                switchBlock:^BOOL (YTSettingsCell *switchCell, BOOL enabled) {
+                    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:LFDryRunKey];
+                    return YES;
+                }
+                settingItemId:0],
+
+            [YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_DIAGNOSTICS")
+                titleDescription:[NSString stringWithFormat:LOC(@"LEARNING_FILTER_DIAGNOSTICS_DESC"),
+                                                            @([LFDiagnostics sharedInstance].allowCount),
+                                                            @([LFDiagnostics sharedInstance].hideCount),
+                                                            @([LFDiagnostics sharedInstance].unknownCount)]
+                accessibilityIdentifier:nil
+                detailTextBlock:nil
+                selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerIndex) {
+                    LFDiagnostics *diagnostics = [LFDiagnostics sharedInstance];
+                    NSMutableArray <YTSettingsSectionItem *> *entryRows = [NSMutableArray array];
+
+                    [entryRows addObject:[YTSettingsSectionItemClass
+                        itemWithTitle:[NSString stringWithFormat:LOC(@"LEARNING_FILTER_DIAGNOSTICS_TOTALS"),
+                                                                 @(diagnostics.allowCount),
+                                                                 @(diagnostics.hideCount),
+                                                                 @(diagnostics.unknownCount),
+                                                                 @(diagnostics.skippedCount)]
+                        titleDescription:[NSString stringWithFormat:LOC(@"LEARNING_FILTER_DIAGNOSTICS_STATE"),
+                                                                    @([LFSubscriptionStore sharedInstance].subscribedChannelIds.count),
+                                                                    LFFilteringActive() ? @"on" : @"inert",
+                                                                    IsEnabled(LFDryRunKey)   ? @"dry run"
+                                                                    : LFStrictSuspended() ? @"strict suspended"
+                                                                                          : @"live"]
+                        accessibilityIdentifier:nil
+                        detailTextBlock:nil
+                        selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+
+                    for (LFDiagnosticsEntry *entry in diagnostics.entries)
+                        [entryRows addObject:[YTSettingsSectionItemClass itemWithTitle:[entry summary]
+                                                                     titleDescription:[entry detail]
+                                                              accessibilityIdentifier:nil
+                                                                      detailTextBlock:nil
+                                                                          selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+
+                    if (diagnostics.entries.count == 0)
+                        [entryRows addObject:[YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_DIAGNOSTICS_EMPTY")
+                                                                     titleDescription:nil
+                                                              accessibilityIdentifier:nil
+                                                                      detailTextBlock:nil
+                                                                          selectBlock:^BOOL (YTSettingsCell *c, NSUInteger i) { return NO; }]];
+
+                    YTSettingsPickerViewController *entryPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"LEARNING_FILTER_DIAGNOSTICS") pickerSectionTitle:nil rows:entryRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:entryPicker];
+                    return YES;
+                }],
 
             [YTSettingsSectionItemClass itemWithTitle:LOC(@"LEARNING_FILTER_RESET_WHITELIST")
                 titleDescription:LOC(@"LEARNING_FILTER_RESET_WHITELIST_DESC")

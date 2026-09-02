@@ -132,17 +132,60 @@ display name while a whitelist wants the channel id and handle too.
 | `LFFilter.{h,m}` | the shared allow/hide decision |
 | `LFHarvest.{h,m}` | turning YouTube's data into the whitelist |
 | `LFPolicy.{h,m}` | subscription and account rules |
+| `LFDiagnostics.{h,m}` | what the filter saw, for the settings screen |
 | `LearningFilter.xm` | the hooks |
 
 Settings live under **YouTubePlus → Learning Filter**.
 
+## When it does not work
+
+Building this tweak means producing an IPA, so guessing costs a full build. Two
+things exist to make one install enough to tell what is going on.
+
+**Diagnostics** (settings → Learning Filter → Diagnostics) records every decision
+in a ring buffer: which identifiers were recovered from each item, which surface
+it was on, what was decided, and whether it was actually hidden. It also shows
+running totals and whether filtering is live, inert, in dry run, or suspended. If
+the feed is empty, or is not being filtered at all, that screen says why.
+
+**Dry run** computes and records every decision but hides nothing. Turning it on
+for a first install confirms channel identity is being extracted correctly before
+any content starts disappearing.
+
+There is also a safety valve. Strict mode hides anything whose channel cannot be
+read, which is right when identification usually works. It would be catastrophic
+if identification stopped working altogether — a YouTube update changing a payload
+shape, say — because it would hide everything and leave an empty app. So strict
+hiding gives up after a long run of unidentifiable items and resumes the moment
+anything is recognised again. Channels that *can* be identified are filtered
+throughout. In normal operation the valve never trips: one recognised item resets
+it.
+
+## Cost
+
+These hooks sit on paths YouTube runs constantly, so:
+
+- Payload scanning works on the byte buffer directly. No intermediate string is
+  built, and nothing calls `strlen` inside a per-byte loop.
+- Each element renderer's verdict is cached on the renderer itself and recomputed
+  only when the whitelist or a setting has moved, tracked by a single epoch
+  counter.
+- `-[GPBMessage description]` is never called for a payload that already
+  identifies a video — the description of a message wrapping a 100 KB payload is
+  a 100 KB string. The surface a renderer belongs to comes from the collection
+  view pass instead, which is where it is actually known.
+- The cell pass debounces, skips while scrolling, and refuses to re-enter.
+- The startup sweep over the class list matches raw C strings rather than
+  wrapping thirty thousand class names in `NSString`.
+
 ## Tests
 
-`Tests/run.sh` builds and runs the decision layer off-device, covering the
-acceptance matrix (two subscribed channels shown, one unsubscribed hidden, on
-each of home, search, Shorts and related), identity normalisation, guide
-harvesting, identifier ranking and the strict-mode behaviour. The hook layer
-needs YouTube itself and is verified on device.
+`Tests/run.sh` builds and runs the decision layer off-device: the acceptance
+matrix (two subscribed channels shown, one unsubscribed hidden, on each of home,
+search, Shorts and related), identity normalisation, guide harvesting, identifier
+ranking, payload scanning against binary payloads, dry run, the safety valve and
+diagnostics. See `Tests/README.md`. The hook layer needs YouTube itself and is
+verified on device.
 
 ## Known limitations
 

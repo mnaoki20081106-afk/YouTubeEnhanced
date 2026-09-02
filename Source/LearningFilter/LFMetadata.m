@@ -1,6 +1,8 @@
 #import "LFMetadata.h"
 #import "LFSubscriptionStore.h"
 
+#import <string.h>
+
 #import <objc/runtime.h>
 
 NSString *const LFInfoVideoIdKey = @"id";
@@ -142,25 +144,131 @@ NSArray<NSString *> *LFHandlesInString(NSString *text) {
     return found.array;
 }
 
-// Scan raw bytes for printable ASCII runs, then pattern-match those. Protobuf
-// payloads keep ids and URLs as plain UTF-8, so this finds them without needing
-// to know the (version-specific) field numbering.
-static NSString *LFPrintableTextFromData(NSData *data, NSUInteger limit) {
-    if (![data isKindOfClass:[NSData class]] || data.length == 0)
-        return nil;
+// Identifiers and URLs sit in protobuf payloads as plain ASCII, so they can be
+// found by scanning bytes rather than by decoding a message whose field
+// numbering changes between YouTube versions.
+//
+// These run on every element renderer the app builds, which during a fast scroll
+// is thousands per second, so they work directly on the byte buffer. Building an
+// NSString first — let alone one character at a time — is the difference between
+// a scan that disappears into the noise and one that visibly stalls the feed.
 
-    const uint8_t *bytes = data.bytes;
-    NSUInteger length = MIN(data.length, limit);
-    NSMutableString *text = [NSMutableString stringWithCapacity:length];
-    for (NSUInteger index = 0; index < length; index++) {
-        uint8_t byte = bytes[index];
-        [text appendFormat:@"%c", (byte >= 0x20 && byte < 0x7f) ? (char)byte : ' '];
+static BOOL LFIsChannelIdCharacter(uint8_t byte) {
+    return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+           byte == '_' || byte == '-';
+}
+
+// Every "UCxxxxxxxxxxxxxxxxxxxxxx" in the buffer, in order, without duplicates.
+// A run longer than 24 characters is skipped: it is some other token that merely
+// starts with "UC".
+static NSArray<NSString *> *LFChannelIdsInBytes(const uint8_t *bytes, NSUInteger length, NSUInteger limit) {
+    if (!bytes || length < 24)
+        return @[];
+
+    NSMutableOrderedSet<NSString *> *found = [NSMutableOrderedSet orderedSet];
+    for (NSUInteger index = 0; index + 24 <= length; index++) {
+        if (bytes[index] != 'U' || bytes[index + 1] != 'C')
+            continue;
+        if (index > 0 && LFIsChannelIdCharacter(bytes[index - 1]))
+            continue;
+
+        NSUInteger end = index + 2;
+        while (end < length && LFIsChannelIdCharacter(bytes[end]))
+            end++;
+
+        if (end - index == 24) {
+            [found addObject:[[NSString alloc] initWithBytes:bytes + index length:24 encoding:NSASCIIStringEncoding]];
+            if (limit > 0 && found.count >= limit)
+                break;
+        }
+        // Either way, jump past the run. Any "UC" inside it is preceded by an
+        // identifier character and would be rejected on its own account, so
+        // rescanning it byte by byte only costs time.
+        index = end - 1;
     }
-    return text;
+    return found.array;
+}
+
+static BOOL LFIsHandleCharacter(uint8_t byte) {
+    return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+           byte == '.' || byte == '_' || byte == '-';
+}
+
+// Handles appear as "/@name" in canonical URLs. A bare "@name" is not accepted
+// here: in a payload it is as likely to be part of a title or a comment.
+static NSArray<NSString *> *LFHandlesInBytes(const uint8_t *bytes, NSUInteger length, NSUInteger limit) {
+    if (!bytes || length < 5)
+        return @[];
+
+    NSMutableOrderedSet<NSString *> *found = [NSMutableOrderedSet orderedSet];
+    for (NSUInteger index = 0; index + 5 <= length; index++) {
+        if (bytes[index] != '/' || bytes[index + 1] != '@')
+            continue;
+
+        NSUInteger start = index + 1;
+        NSUInteger end = start + 1;
+        while (end < length && LFIsHandleCharacter(bytes[end]))
+            end++;
+
+        NSUInteger handleLength = end - start;
+        if (handleLength < 4 || handleLength > 31)
+            continue;
+
+        NSString *handle = [[NSString alloc] initWithBytes:bytes + start
+                                                    length:handleLength
+                                                  encoding:NSASCIIStringEncoding];
+        handle = LFNormalizeHandle(handle);
+        if (handle)
+            [found addObject:handle];
+        if (limit > 0 && found.count >= limit)
+            break;
+        index = end - 1;
+    }
+    return found.array;
+}
+
+// The 11-character video id out of an embedded thumbnail URL. That URL is the
+// most dependable marker that a payload describes a video at all.
+static NSString *LFVideoIdInBytes(const uint8_t *bytes, NSUInteger length) {
+    static const char *const prefixes[] = {"i.ytimg.com/vi/", "i.ytimg.com/vi_webp/", "/shorts/", "?v="};
+#define LFVideoIdPrefixCount 4
+    static const NSUInteger prefixCount = LFVideoIdPrefixCount;
+    _Static_assert(sizeof(prefixes) / sizeof(prefixes[0]) == LFVideoIdPrefixCount, "prefix count out of step");
+    // Measured once. The comparison below runs for every byte of every payload
+    // the app builds, and calling strlen on a constant inside it would cost more
+    // than the comparison itself.
+    static NSUInteger prefixLengths[LFVideoIdPrefixCount];
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        for (NSUInteger which = 0; which < prefixCount; which++)
+            prefixLengths[which] = strlen(prefixes[which]);
+    });
+
+    for (NSUInteger index = 0; index < length; index++) {
+        for (NSUInteger which = 0; which < prefixCount; which++) {
+            NSUInteger prefixLength = prefixLengths[which];
+            if (index + prefixLength + 11 > length)
+                continue;
+            if (memcmp(bytes + index, prefixes[which], prefixLength) != 0)
+                continue;
+
+            const uint8_t *identifier = bytes + index + prefixLength;
+            BOOL valid = YES;
+            for (NSUInteger offset = 0; offset < 11 && valid; offset++)
+                valid = LFIsChannelIdCharacter(identifier[offset]);
+            if (!valid)
+                continue;
+
+            return [[NSString alloc] initWithBytes:identifier length:11 encoding:NSASCIIStringEncoding];
+        }
+    }
+    return nil;
 }
 
 NSArray<NSString *> *LFChannelIdsInData(NSData *data) {
-    return LFChannelIdsInString(LFPrintableTextFromData(data, 1048576));
+    if (![data isKindOfClass:[NSData class]])
+        return @[];
+    return LFChannelIdsInBytes(data.bytes, data.length, 0);
 }
 
 #pragma mark - Field roles
@@ -474,20 +582,19 @@ NSDictionary<NSString *, NSString *> *LFVideoInfoFromElementData(NSData *data) {
         NSUInteger length = MIN(data.length, (NSUInteger)262144);
         LFRecordElementRendererFields(bytes, length, result, priorities, 0);
 
-        NSString *text = LFPrintableTextFromData(data, 262144);
         // The owner's channel id and handle are carried by the cell's navigation
-        // endpoints. A video cell references exactly one channel, so taking the
-        // first match is safe; where several appear they are the same channel in
-        // different forms (browse endpoint, canonical URL, avatar link).
-        NSString *channelId = LFChannelIdsInString(text).firstObject;
+        // endpoints. A video cell references exactly one channel, so the first
+        // match is the right one; where several appear they are the same channel
+        // in different forms (browse endpoint, canonical URL, avatar link).
+        NSString *channelId = LFChannelIdsInBytes(bytes, length, 1).firstObject;
         if (channelId)
             LFRecordValue(result, priorities, LFFieldRoleChannelId, 90, channelId);
 
-        NSString *handle = LFHandlesInString(text).firstObject;
+        NSString *handle = LFHandlesInBytes(bytes, length, 1).firstObject;
         if (handle)
             LFRecordValue(result, priorities, LFFieldRoleHandle, 90, handle);
 
-        NSString *videoId = LFVideoIdFromText(text);
+        NSString *videoId = LFVideoIdInBytes(bytes, length);
         if (videoId)
             LFRecordValue(result, priorities, LFFieldRoleVideoId, 60, videoId);
     } @catch (__unused NSException *exception) {

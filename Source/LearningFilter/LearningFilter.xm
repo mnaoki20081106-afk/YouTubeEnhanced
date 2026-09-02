@@ -6,6 +6,7 @@
 // whole group is only initialised when the feature is switched on.
 
 #import "LFCommon.h"
+#import "LFDiagnostics.h"
 #import "LFFilter.h"
 #import "LFHarvest.h"
 #import "LFMetadata.h"
@@ -19,12 +20,23 @@
 @property(nonatomic, assign) BOOL lfFiltering;
 @property(nonatomic, assign) BOOL lfFilterScheduled;
 @property(nonatomic, assign) NSTimeInterval lfLastFilterTime;
+// The surface this view belongs to, plus one, so that zero means "not worked out
+// yet". Walking the responder chain is cheap but not free, and layoutSubviews
+// runs constantly.
+@property(nonatomic, assign) NSInteger lfCachedSurface;
 - (void)lfScheduleFiltering;
 @end
 
 @interface _ASCollectionViewCell : UICollectionViewCell
 - (id)node;
 @end
+
+@interface YTIElementRenderer : NSObject
+- (NSData *)elementData;
+- (BOOL)lfShouldDropElementData:(NSData *)data;
+@end
+
+static void *LFRendererVerdictKey = &LFRendererVerdictKey;
 
 #pragma mark - Surface detection
 
@@ -46,6 +58,18 @@ static LFSurface LFSurfaceForView(UIView *view) {
         responder = responder.nextResponder;
     }
     return LFSurfaceHome;
+}
+
+// The surface whose feed is currently being built. Element renderers are asked
+// for their payload while a collection view lays out, but a renderer has no way
+// back to the view it will end up in — and building its description just to read
+// a template name is the most expensive thing on this path, since the
+// description of a message carrying a 100 KB payload is a 100 KB string. The
+// collection view pass records the surface here instead.
+static LFSurface gCurrentSurface = LFSurfaceHome;
+
+static LFSurface LFCurrentSurface(void) {
+    return gCurrentSurface;
 }
 
 static BOOL LFViewIsOnSubscriptionsFeed(UIView *view) {
@@ -70,14 +94,23 @@ static BOOL LFDescriptionContainsAny(NSString *description, NSArray<NSString *> 
     return NO;
 }
 
-// The cell templates that carry a single video owned by one channel. Anything
-// not listed here is left alone, so shelves, headers, comments and chrome are
-// never removed by this filter.
+// Template names for the cells that carry a single video owned by one channel.
+// This is a hint, not the test: YouTube renames templates between versions, so
+// the primary signal is the payload itself (below). Anything that matches
+// neither is left alone, so shelves, headers, comments and chrome are never
+// touched by this filter.
 static BOOL LFTemplateIsVideoCell(NSString *description) {
     return LFDescriptionContainsAny(description, @[
         @"video_with_context", @"compact_video", @"search_video", @"grid_video", @"video_lockup",
         @"shorts_video_cell", @"reel_item", @"rich_item", @"playlist_video"
     ]);
+}
+
+// A payload that embeds a watch or thumbnail URL describes a video. That holds
+// across versions because the URL shape is part of YouTube's own API, not of a
+// client-side template name — which is why it, and not the template, decides.
+static BOOL LFPayloadIsVideoCell(NSDictionary<NSString *, NSString *> *info) {
+    return info[LFInfoVideoIdKey] != nil;
 }
 
 static LFSurface LFSurfaceForTemplate(NSString *description) {
@@ -179,7 +212,10 @@ static void LFFilterVisibleCells(YTAsyncCollectionView *collectionView) {
         return;
 
     BOOL onSubscriptionsFeed = LFViewIsOnSubscriptionsFeed(collectionView);
-    LFSetOnSubscriptionsSurface(onSubscriptionsFeed);
+    // Only ever raised here, never lowered: a nested collection view elsewhere on
+    // the same screen must not cancel it, and it lapses on its own.
+    if (onSubscriptionsFeed)
+        LFSetOnSubscriptionsSurface(YES);
 
     // The Subscriptions tab is the whitelist's own source: everything shown there
     // is subscribed by definition, so it feeds the store instead of being judged
@@ -187,7 +223,15 @@ static void LFFilterVisibleCells(YTAsyncCollectionView *collectionView) {
     if (!onSubscriptionsFeed && !LFFilteringActive())
         return;
 
-    LFSurface surface = LFSurfaceForView(collectionView);
+    LFSurface surface;
+    if (collectionView.lfCachedSurface > 0) {
+        surface = (LFSurface)(collectionView.lfCachedSurface - 1);
+    } else {
+        surface = LFSurfaceForView(collectionView);
+        collectionView.lfCachedSurface = (NSInteger)surface + 1;
+    }
+    gCurrentSurface = surface;
+
     if (!onSubscriptionsFeed && !LFSurfaceEnabled(surface))
         return;
 
@@ -213,7 +257,15 @@ static void LFFilterVisibleCells(YTAsyncCollectionView *collectionView) {
                 continue;
             }
 
-            BOOL hide = LFShouldHideNode(node, surface);
+            NSDictionary<NSString *, NSString *> *info = LFVideoInfoFromNode(node);
+            LFDecision decision = LFDecisionForInfo(info);
+            BOOL hide = LFShouldHideInfo(info, surface);
+            [[LFDiagnostics sharedInstance] recordSource:@"cell"
+                                                 surface:surface
+                                                    info:info
+                                                decision:decision
+                                                  hidden:hide];
+
             if (hide && collectionView.pagingEnabled) {
                 LFSetCellHidden(cell, NO);
                 LFAdvanceShortsPager(collectionView, cell);
@@ -233,11 +285,22 @@ static void LFHarvestGuideResponse(id response) {
     if (!response)
         return;
 
-    // A guide response is a large protobuf; dumping and scanning it is done off
-    // the main thread so the launch path is untouched.
+    NSString *description = nil;
+    @try {
+        // Taken here rather than on the worker queue: the caller is about to hand
+        // this response on, and other tweaks — uYouEnhanced's own tab replacement
+        // among them — mutate it. Reading it after that has started would be a
+        // race. The resulting string is immutable, so parsing it off-thread is
+        // safe.
+        description = [response description];
+    } @catch (__unused NSException *exception) {
+        return;
+    }
+    if (description.length == 0)
+        return;
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         @try {
-            NSString *description = [response description];
             if (LFHarvestFromDescription(description)) {
                 // Subscriptions can only be read while signed in, so a successful
                 // harvest is also proof that an account is bound.
@@ -257,36 +320,95 @@ static void LFHarvestGuideResponse(id response) {
 // This is the same mechanism uYouEnhanced already uses to strip ads and Shorts.
 %hook YTIElementRenderer
 
+%new
+- (BOOL)lfShouldDropElementData:(NSData *)data {
+    NSDictionary<NSString *, NSString *> *info = LFVideoInfoFromElementData(data);
+    BOOL filtering = LFFilteringActive() && !LFOnSubscriptionsSurface();
+
+    // The payload settles most items without ever building the renderer's
+    // description, which is the expensive call on this path.
+    if (LFPayloadIsVideoCell(info)) {
+        if (!filtering) {
+            [[LFDiagnostics sharedInstance] recordSkipped];
+            return NO;
+        }
+
+        LFSurface surface = LFCurrentSurface();
+        if (!LFSurfaceEnabled(surface)) {
+            [[LFDiagnostics sharedInstance] recordSkipped];
+            return NO;
+        }
+
+        LFDecision decision = LFDecisionForInfo(info);
+        BOOL hide = LFShouldHideInfo(info, surface);
+        [[LFDiagnostics sharedInstance] recordSource:@"renderer"
+                                             surface:surface
+                                                info:info
+                                            decision:decision
+                                              hidden:hide];
+        return hide;
+    }
+
+    NSString *description = [self description];
+    if (description.length == 0)
+        return NO;
+
+    // Template match first: it is a substring test, while the gates reach into
+    // the account store.
+    if (LFTemplateIsSubscribeControl(description) && LFShouldBlockSubscriptionChanges())
+        return YES;
+
+    if (LFTemplateIsAddAccountControl(description) && LFShouldBlockAccountAddition())
+        return YES;
+
+    if (!filtering || !LFTemplateIsVideoCell(description)) {
+        [[LFDiagnostics sharedInstance] recordSkipped];
+        return NO;
+    }
+
+    // A cell the template says is a video, but whose payload gave up nothing.
+    // Strict mode decides what happens to it.
+    LFSurface surface = LFSurfaceForTemplate(description);
+    if (!LFSurfaceEnabled(surface)) {
+        [[LFDiagnostics sharedInstance] recordSkipped];
+        return NO;
+    }
+
+    LFDecision decision = LFDecisionForInfo(info);
+    BOOL hide = LFShouldHideInfo(info, surface);
+    [[LFDiagnostics sharedInstance] recordSource:@"renderer"
+                                         surface:surface
+                                            info:info
+                                        decision:decision
+                                          hidden:hide];
+    return hide;
+}
+
 - (NSData *)elementData {
     NSData *data = %orig;
     if (![data isKindOfClass:[NSData class]] || data.length == 0)
         return data;
 
     @try {
-        NSString *description = [self description];
-        if (description.length == 0)
+        if (!LFBoolDefaultYes(LFEnabledKey))
             return data;
 
-        // Template match first: it is a substring test, while the gates reach into
-        // the account store.
-        if (LFTemplateIsSubscribeControl(description) && LFShouldBlockSubscriptionChanges())
-            return nil;
+        // elementData is read repeatedly for the same renderer, and answering it
+        // means scanning the payload and often building the renderer's
+        // description. The verdict is therefore kept on the renderer and only
+        // recomputed when the whitelist or a setting has moved underneath it.
+        NSUInteger epoch = LFFilterEpoch();
+        NSNumber *cached = objc_getAssociatedObject(self, LFRendererVerdictKey);
+        if (cached) {
+            NSUInteger stored = cached.unsignedIntegerValue;
+            if (stored / 2 == epoch)
+                return (stored % 2) ? nil : data;
+        }
 
-        if (LFTemplateIsAddAccountControl(description) && LFShouldBlockAccountAddition())
-            return nil;
-
-        if (LFOnSubscriptionsSurface() || !LFFilteringActive())
-            return data;
-
-        if (!LFTemplateIsVideoCell(description))
-            return data;
-
-        LFSurface surface = LFSurfaceForTemplate(description);
-        if (!LFSurfaceEnabled(surface))
-            return data;
-
-        if (LFShouldHideInfo(LFVideoInfoFromElementData(data), surface))
-            return nil;
+        BOOL drop = [self lfShouldDropElementData:data];
+        objc_setAssociatedObject(self, LFRendererVerdictKey, @(epoch * 2 + (drop ? 1 : 0)),
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return drop ? nil : data;
     } @catch (__unused NSException *exception) {
     }
 
@@ -303,6 +425,7 @@ static void LFHarvestGuideResponse(id response) {
 %property(nonatomic, assign) BOOL lfFiltering;
 %property(nonatomic, assign) BOOL lfFilterScheduled;
 %property(nonatomic, assign) NSTimeInterval lfLastFilterTime;
+%property(nonatomic, assign) NSInteger lfCachedSurface;
 
 %new
 - (void)lfScheduleFiltering {
@@ -336,6 +459,7 @@ static void LFHarvestGuideResponse(id response) {
 
 - (void)didMoveToWindow {
     %orig;
+    self.lfCachedSurface = 0;
     if (self.window)
         [self lfScheduleFiltering];
 }
@@ -380,5 +504,15 @@ static void LFHarvestGuideResponse(id response) {
                                                        queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(__unused NSNotification *notification) {
                                                       LFRefreshVisibleFeeds();
+                                                  }];
+
+    // Flipping a switch in settings has to invalidate the verdicts already cached
+    // on element renderers, or the feed would keep showing the old decision until
+    // YouTube happened to rebuild it.
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification
+                                                      object:nil
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(__unused NSNotification *notification) {
+                                                      LFBumpFilterEpoch();
                                                   }];
 }

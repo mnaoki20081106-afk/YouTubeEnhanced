@@ -276,3 +276,14 @@ https://github.com/PoomSmart/Return-YouTube-Dislikes/tree/main/layout/Library/Ap
 "LEARNING_FILTER_RESET_ACCOUNT" = "Reset the account lock";
 "LEARNING_FILTER_RESET_ACCOUNT_DESC" = "Use after signing out if Add account is still blocked.";
 "LEARNING_FILTER_CONFIRM" = "Are you sure?";
+
+"LEARNING_FILTER_DRY_RUN" = "Dry run";
+"LEARNING_FILTER_DRY_RUN_DESC" = "Work out every decision and record it, but hide nothing. Use this on a first install to check that channels are being identified before content starts disappearing.";
+"LEARNING_FILTER_DIAGNOSTICS" = "Diagnostics";
+"LEARNING_FILTER_DIAGNOSTICS_DESC" = "%@ shown, %@ hidden, %@ unidentified so far. Tap to see what the filter read from each item.";
+"LEARNING_FILTER_DIAGNOSTICS_TOTALS" = "%@ shown / %@ hidden / %@ unidentified / %@ not a video";
+"LEARNING_FILTER_DIAGNOSTICS_STATE" = "%@ channel IDs in the whitelist, filtering %@, %@";
+"LEARNING_FILTER_DIAGNOSTICS_EMPTY" = "Nothing recorded yet - scroll a feed, then come back";
+
+"LEARNING_FILTER_STRICT_FALLBACK" = "Give up strict mode if nothing can be identified";
+"LEARNING_FILTER_STRICT_FALLBACK_DESC" = "Safety valve. If a long run of items in a row cannot be identified at all, stop hiding them rather than leave the app empty. Filtering of channels that can be identified is unaffected, and strict mode resumes as soon as anything is recognised again.";

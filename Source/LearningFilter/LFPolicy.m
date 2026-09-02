@@ -5,6 +5,7 @@
 
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <string.h>
 
 #pragma mark - Gates
 
@@ -88,13 +89,21 @@ BOOL LFShouldBlockAccountAddition(void) {
     if (!LFBoolDefaultYes(LFEnabledKey) || !LFBoolDefaultYes(LFSingleAccountKey))
         return NO;
 
+    // "Zero accounts" is only believed once this process has actually seen an
+    // account. At launch the account store can read empty simply because it has
+    // not loaded yet, and treating that as a sign-out would wipe the whitelist
+    // of a perfectly signed-in user.
+    static BOOL observedSignedIn = NO;
+
     NSInteger count = LFSignedInAccountCount();
     if (count >= 0) {
         if (count >= 1) {
+            observedSignedIn = YES;
             LFMarkAccountBound();
-        } else if (LFAccountIsBound()) {
-            // The account was signed out. The whitelist described that account's
+        } else if (observedSignedIn && LFAccountIsBound()) {
+            // A real sign-out. The whitelist described that account's
             // subscriptions, so it goes with it — the next account brings its own.
+            observedSignedIn = NO;
             LFClearAccountBinding();
             [[LFSubscriptionStore sharedInstance] reset];
         }
@@ -169,9 +178,20 @@ static BOOL LFStringHasAnyPrefix(NSString *value, NSArray<NSString *> *prefixes)
     return NO;
 }
 
-static BOOL LFStringContainsAny(NSString *value, NSArray<NSString *> *needles) {
-    for (NSString *needle in needles) {
-        if ([value rangeOfString:needle options:NSCaseInsensitiveSearch].location != NSNotFound)
+// Matched on the raw class name. The sweep looks at every registered class, and
+// wrapping thirty thousand of them in NSString just to search is a measurable
+// slice of launch time.
+static BOOL LFNameContainsAny(const char *name, const char *const *needles, size_t needleCount) {
+    for (size_t index = 0; index < needleCount; index++) {
+        if (strcasestr(name, needles[index]))
+            return YES;
+    }
+    return NO;
+}
+
+static BOOL LFNameHasAnyPrefix(const char *name, const char *const *prefixes, size_t prefixCount) {
+    for (size_t index = 0; index < prefixCount; index++) {
+        if (strncmp(name, prefixes[index], strlen(prefixes[index])) == 0)
             return YES;
     }
     return NO;
@@ -225,24 +245,24 @@ void LFInstallPolicyGuards(void) {
         if (!classes)
             return;
 
+        // Keep the sweep inside YouTube's and Google's own classes.
+        static const char *const classPrefixes[] = {"YT", "GOO", "SSO", "ELM"};
+        static const char *const subscriptionNames[] = {"subscri"};
+        static const char *const accountNames[] = {"account", "identity", "signin"};
+
         for (unsigned int index = 0; index < classCount; index++) {
             Class cls = classes[index];
-            const char *rawName = class_getName(cls);
-            if (!rawName)
-                continue;
-            NSString *name = @(rawName);
-
-            // Keep the sweep inside YouTube's and Google's own classes.
-            if (!LFStringHasAnyPrefix(name, @[@"YT", @"GOO", @"SSO", @"ELM"]))
+            const char *name = class_getName(cls);
+            if (!name || !LFNameHasAnyPrefix(name, classPrefixes, 4))
                 continue;
 
-            if (blockSubscriptions && LFStringContainsAny(name, @[@"subscri"]))
+            if (blockSubscriptions && LFNameContainsAny(name, subscriptionNames, 1))
                 LFNeuterMatchingMethods(cls, subscriptionSelectors);
 
             // Adding an account is only blocked once one is signed in, so these
             // methods are left alone entirely on an install that has never seen
             // an account: the first sign-in has to work.
-            if (limitAccounts && blockAccountAddition && LFStringContainsAny(name, @[@"account", @"identity", @"signin"]))
+            if (limitAccounts && blockAccountAddition && LFNameContainsAny(name, accountNames, 3))
                 LFNeuterMatchingMethods(cls, accountSelectors);
         }
 
